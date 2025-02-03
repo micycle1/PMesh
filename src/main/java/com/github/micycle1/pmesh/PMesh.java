@@ -5,19 +5,30 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
+
+import org.jgrapht.Graph;
+import org.jgrapht.graph.SimpleGraph;
+import org.jgrapht.graph.SimpleWeightedGraph;
 
 import processing.core.PShape;
 import processing.core.PVector;
 
+/**
+ * Half-edge representation for mesh-like PShapes.
+ */
 public class PMesh {
 
-	final PShape mesh;
-	final List<HEVertex> vertices;
-	final List<HEFace> faces;
-	final List<HalfEdge> edges;
-	final List<HalfEdge> baseEdges;
+	// TODO vertex deletion
+	// TODO edge deletion (non-boundary edges only?)
+	// TODO good way to get vertex --> all outgoing edges (directionally based) (or
+	// adjacent vertices)
+
+	private final List<HEVertex> vertices;
+	private final List<HEFace> faces;
+	private final List<HalfEdge> edges;
+	private final List<HalfEdge> baseEdges;
 
 	/**
 	 *
@@ -26,19 +37,19 @@ public class PMesh {
 	 *             simple polygon.
 	 */
 	public PMesh(PShape mesh) {
-		this.mesh = mesh;
 		this.vertices = new ArrayList<>();
 		this.faces = new ArrayList<>();
 		this.edges = new ArrayList<>();
 		this.baseEdges = new ArrayList<>();
-		buildHalfEdgeStructure();
+		buildHalfEdgeStructure(mesh);
 	}
 
-	private void buildHalfEdgeStructure() {
-		Map<PVector, HEVertex> pvectorToVertex = new HashMap<>();
-		Map<EdgeKey, HalfEdge> edgeMap = new HashMap<>();
-
+	private void buildHalfEdgeStructure(PShape mesh) {
 		List<PShape> faceShapes = PShapeUtils.getChildren(mesh);
+
+		Map<PVector, HEVertex> pvectorToVertex = new HashMap<>(4 * faceShapes.size());
+		Map<EdgeKey, HalfEdge> edgeMap = new HashMap<>(4 * faceShapes.size());
+
 		for (PShape faceShape : faceShapes) {
 			int vertexCount = faceShape.getVertexCount();
 			List<HEVertex> faceVertices = new ArrayList<>(vertexCount);
@@ -55,7 +66,7 @@ public class PMesh {
 
 			List<HalfEdge> faceEdges = new ArrayList<>(vertexCount);
 			HEFace face = new HEFace();
-			faces.add(face);
+			getFaces().add(face);
 
 			for (int i = 0; i < vertexCount; i++) {
 				HEVertex a = faceVertices.get(i);
@@ -69,7 +80,7 @@ public class PMesh {
 				boolean hasTwin = twin != null;
 				if (he == null) {
 					he = new HalfEdge(a);
-					edges.add(he);
+					getEdges().add(he);
 					edgeMap.put(edgeKey, he);
 					a.outgoingEdges.add(he);
 
@@ -77,10 +88,9 @@ public class PMesh {
 						he.twin = twin;
 						twin.twin = he;
 					} else {
-						baseEdges.add(he);
+						he.baseReference = he;
+						getBaseEdges().add(he);
 					}
-				} else {
-					System.out.println("wtf");
 				}
 				faceEdges.add(he);
 			}
@@ -95,8 +105,9 @@ public class PMesh {
 		}
 
 		// Mark boundary vertices
-		edges.forEach(he -> {
+		getEdges().forEach(he -> {
 			if (he.twin == null) {
+				// TODO
 				he.start.onBoundary = true;
 				he.getEndVertex().onBoundary = true;
 			}
@@ -106,52 +117,91 @@ public class PMesh {
 		vertices.forEach(v -> {
 			Set<HEVertex> uniqueNeighbors = new LinkedHashSet<>();
 			v.outgoingEdges.forEach(he -> {
+				// TODO
 				uniqueNeighbors.add(he.getEndVertex());
-
 				uniqueNeighbors.add(he.prev.start);
 			});
 			v.neighbors.addAll(uniqueNeighbors);
 		});
 	}
 
-	static class HEVertex {
-		public final PVector position;
-		public final List<HalfEdge> outgoingEdges = new ArrayList<>();
-		public final List<HEVertex> neighbors = new ArrayList<>();
-		public boolean onBoundary = false;
-
-		public HEVertex(PVector position) {
-			this.position = position.copy();
-		}
-
-		public PVector getPosition() {
-			return position;
-		}
-
-		@Override
-		public String toString() {
-			return position.toString();
-		}
+	public List<HEVertex> getVertices() {
+		return vertices;
 	}
 
-	static class HalfEdge {
-		public HEVertex start;
-		public HalfEdge twin;
-		public HalfEdge next;
-		public HalfEdge prev;
+	public List<HEFace> getFaces() {
+		return faces;
+	}
 
-		public HalfEdge(HEVertex start) {
-			this.start = start;
-		}
+	public List<HalfEdge> getEdges() {
+		return edges;
+	}
 
-		public HEVertex getEndVertex() {
-			return next.start;
-		}
+	public List<HalfEdge> getBaseEdges() {
+		return baseEdges;
+	}
 
-		@Override
-		public String toString() {
-			return start.toString();
+	public List<HalfEdge> getFaceHalfEdges(HEFace face) {
+		List<HalfEdge> faceHalfEdges = new ArrayList<>();
+		var start = face.edge;
+		if (start != null) {
+			HalfEdge currentHE = start;
+			do {
+				faceHalfEdges.add(currentHE);
+				currentHE = currentHE.next;
+			} while (currentHE != start);
 		}
+		return faceHalfEdges;
+	}
+
+	public List<HEVertex> getFaceVertices(HEFace face) {
+		List<HEVertex> faceVertices = new ArrayList<>();
+		List<HalfEdge> faceHalfEdges = getFaceHalfEdges(face);
+		for (HalfEdge he : faceHalfEdges) {
+			faceVertices.add(he.start);
+		}
+		return faceVertices;
+	}
+
+	public PShape toPShape() {
+		var faceShapes = faces.stream().map(f -> {
+			var vertices = getFaceVertices(f).stream().map(v -> v.getPosition()).toList();
+			return PShapeUtils.fromPVector(vertices);
+		}).toList();
+
+		return PShapeUtils.flatten(faceShapes);
+	}
+
+	/**
+	 * Returns a simple undirected unweighted graph representing the mesh, with
+	 * HalfEdge as edges.
+	 * 
+	 * @return a simple undirected unweighted graph
+	 */
+	public Graph<HEVertex, HalfEdge> toUnweightedGraph() {
+		SimpleGraph<HEVertex, HalfEdge> graph = new SimpleGraph<>(HalfEdge.class);
+		vertices.forEach(graph::addVertex);
+		getBaseEdges().forEach(baseEdge -> graph.addEdge(baseEdge.start, baseEdge.getEndVertex(), baseEdge));
+		return graph;
+	}
+
+	/**
+	 * Returns a simple undirected weighted graph representing the mesh, with
+	 * HalfEdge as edges and weights derived from the supplied edge weight function.
+	 * 
+	 * @param edgeWeightFunction function to determine the weight of an edge. Takes
+	 *                           a HalfEdge and returns a double weight.
+	 * @return a simple undirected weighted graph
+	 */
+	public Graph<HEVertex, HalfEdge> toWeightedGraph(ToDoubleFunction<HalfEdge> edgeWeightFunction) {
+		SimpleWeightedGraph<HEVertex, HalfEdge> graph = new SimpleWeightedGraph<>(HalfEdge.class);
+		vertices.forEach(graph::addVertex);
+		getBaseEdges().forEach(edge -> {
+			graph.addEdge(edge.start, edge.getEndVertex(), edge);
+			double weight = edgeWeightFunction.applyAsDouble(edge);
+			graph.setEdgeWeight(edge, weight);
+		});
+		return graph;
 	}
 
 	static class HEFace {
@@ -162,7 +212,7 @@ public class PMesh {
 		private final HEVertex a;
 		private final HEVertex b;
 
-		public EdgeKey(HEVertex a, HEVertex b) {
+		private EdgeKey(HEVertex a, HEVertex b) {
 			this.a = a;
 			this.b = b;
 		}
@@ -180,30 +230,9 @@ public class PMesh {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(System.identityHashCode(a), System.identityHashCode(b));
+			int hash = (1 + a.hashCode()) * 31;
+			hash = 31 * hash + b.hashCode();
+			return hash;
 		}
-	}
-
-	// Example of how to get all half-edges of a face
-	public List<HalfEdge> getFaceHalfEdges(HEFace face) {
-		List<HalfEdge> faceHalfEdges = new ArrayList<>();
-		if (face.edge != null) {
-			HalfEdge currentHE = face.edge;
-			do {
-				faceHalfEdges.add(currentHE);
-				currentHE = currentHE.next;
-			} while (currentHE != face.edge);
-		}
-		return faceHalfEdges;
-	}
-
-	// Example of how to get all vertices of a face
-	public List<HEVertex> getFaceVertices(HEFace face) {
-		List<HEVertex> faceVertices = new ArrayList<>();
-		List<HalfEdge> faceHalfEdges = getFaceHalfEdges(face);
-		for (HalfEdge he : faceHalfEdges) {
-			faceVertices.add(he.start);
-		}
-		return faceVertices;
 	}
 }

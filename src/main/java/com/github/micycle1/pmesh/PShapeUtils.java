@@ -1,6 +1,9 @@
 package com.github.micycle1.pmesh;
 
+import static processing.core.PConstants.GROUP;
+
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
@@ -10,6 +13,9 @@ import processing.core.PShape;
 import processing.core.PVector;
 
 class PShapeUtils {
+
+	private static final int green = color(173, 245, 66, 255);
+	private static final int dark = color(39, 41, 37, 255);
 
 	/**
 	 * Extracts the children of a given PShape.
@@ -49,7 +55,7 @@ class PShapeUtils {
 	 * Ensures that duplicate consecutive vertices are not included in the list, and
 	 * also removes the closing vertex if it matches the starting vertex.
 	 */
-	private static List<PVector> toPVector(PShape shape) {
+	static List<PVector> toPVector(PShape shape) {
 		final List<PVector> vertices = new ArrayList<>();
 		PVector lastVertex = null;
 		for (int i = 0; i < shape.getVertexCount(); i++) {
@@ -77,16 +83,36 @@ class PShapeUtils {
 	 * @return A PShape object representing the closed path defined by the given
 	 *         vertices.
 	 */
-	private static PShape fromPVector(List<PVector> vertices) {
+	static PShape fromPVector(Collection<PVector> vertices) {
 		PShape shape = new PShape();
 		shape.setFamily(PShape.PATH);
-		for (int i = 0; i < vertices.size(); i++) {
-			PVector v = vertices.get(i);
+		shape.setFill(true);
+		shape.setFill(green);
+		shape.setStroke(true);
+		shape.setStroke(dark);
+		shape.setStrokeWeight(2);
+		
+		shape.beginShape();
+		for (var v : vertices) {
 			shape.vertex(v.x, v.y);
 		}
 		shape.endShape(PConstants.CLOSE);
 
 		return shape;
+	}
+
+	/**
+	 * Flattens a collection of PShapes into a single GROUP PShape which has the
+	 * shapes as its children. If the collection contains only one shape, it is
+	 * returned directly as a non-GROUP shape.
+	 */
+	static PShape flatten(Collection<PShape> shapes) {
+		PShape group = new PShape(GROUP);
+		shapes.forEach(group::addChild);
+		if (group.getChildCount() == 1) {
+			return group.getChild(0);
+		}
+		return group;
 	}
 
 	/**
@@ -116,6 +142,10 @@ class PShapeUtils {
 
 		// In Processing's y-down system, a positive area corresponds to CW
 		return area > 0;
+	}
+
+	private static int color(final int red, final int green, final int blue, final int alpha) {
+		return alpha << 24 | red << 16 | green << 8 | blue;
 	}
 
 }

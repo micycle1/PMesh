@@ -4,46 +4,50 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.util.function.ToDoubleFunction;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-
-import com.github.micycle1.pmesh.PMesh.HEVertex;
-import com.github.micycle1.pmesh.PMesh.HalfEdge;
 
 import processing.core.PConstants;
 import processing.core.PShape;
+import processing.core.PVector;
 
 public class PMeshTest {
 
 	private PShape triangleMesh;
 	private PShape quadMesh;
 	private PShape gridWithHoleMesh;
+	private PShape grid2x2;
 
 	@BeforeEach
-	public void setUp() {
-		triangleMesh = createSingleTriangleMesh();
-		quadMesh = createQuadrilateralMesh();
+	void setUp() {
+		triangleMesh = createSingleTriangleMesh(); // single triangle
+		quadMesh = createQuadrilateralMesh(); // two triangles forming quadrilateral
 		gridWithHoleMesh = create3x3GridSquaresWithHole();
+		grid2x2 = create2x2GridSquares();
 	}
 
 	@Test
-	public void testTriangleMeshStructure() {
+	void testTriangleMeshStructure() {
 		PMesh mesh = new PMesh(triangleMesh);
 		var t = triangleMesh.getChild(0);
 
 		// Verify basic counts
-		assertEquals(3, mesh.vertices.size());
-		assertEquals(3, mesh.edges.size());
-		assertEquals(1, mesh.faces.size());
+		assertEquals(3, mesh.getVertices().size());
+		assertEquals(3, mesh.getEdges().size());
+		assertEquals(1, mesh.getFaces().size());
 
 		// Verify edge connections
-		HalfEdge firstEdge = mesh.edges.get(0);
-		assertEquals(t.getVertex(0), firstEdge.start.position);
+		HalfEdge firstEdge = mesh.getEdges().get(0);
+		assertEquals(t.getVertex(0), firstEdge.start.getPosition());
 		HalfEdge secondEdge = firstEdge.next;
-		assertEquals(t.getVertex(1), secondEdge.start.position);
+		assertEquals(t.getVertex(1), secondEdge.start.getPosition());
 		HalfEdge thirdEdge = secondEdge.next;
-		assertEquals(t.getVertex(2), thirdEdge.start.position);
+		assertEquals(t.getVertex(2), thirdEdge.start.getPosition());
 
 		assertSame(firstEdge, thirdEdge.next);
 		assertSame(secondEdge, firstEdge.next);
@@ -51,29 +55,29 @@ public class PMeshTest {
 		assertSame(thirdEdge, firstEdge.prev);
 
 		// Verify boundary status
-		for (HEVertex vertex : mesh.vertices) {
+		for (HEVertex vertex : mesh.getVertices()) {
 			assertTrue(vertex.onBoundary);
 		}
 
 		// Verify vertex neighbors
-		for (HEVertex vertex : mesh.vertices) {
-			assertEquals(2, vertex.neighbors.size());
+		for (HEVertex vertex : mesh.getVertices()) {
+			assertEquals(2, vertex.getNeighbors().size());
 		}
 	}
 
 	@Test
-	public void testQuadrilateralMeshStructure() {
-		PMesh pMesh = new PMesh(quadMesh);
+	void testQuadrilateralMeshStructure() {
+		PMesh mesh = new PMesh(quadMesh);
 
 		// Verify basic counts
-		assertEquals(4, pMesh.vertices.size());
-		assertEquals(5, pMesh.baseEdges.size()); // 4 outer edges + 1 diagonal
-		assertEquals(6, pMesh.edges.size()); // 4 outer edges + 1 shared diagonal (=2)
-		assertEquals(2, pMesh.faces.size());
+		assertEquals(4, mesh.getVertices().size());
+		assertEquals(5, mesh.getBaseEdges().size()); // 4 outer edges + 1 diagonal
+		assertEquals(6, mesh.getEdges().size()); // 4 outer edges + 1 shared diagonal (=2)
+		assertEquals(2, mesh.getFaces().size());
 
 		// Verify twin edges using edges
 		int twinCount = 0;
-		for (HalfEdge edge : pMesh.edges) {
+		for (HalfEdge edge : mesh.getEdges()) {
 			if (edge.twin != null) {
 				twinCount++;
 			}
@@ -82,7 +86,7 @@ public class PMeshTest {
 
 		// Verify twin edges using base edges
 		twinCount = 0;
-		for (HalfEdge edge : pMesh.baseEdges) {
+		for (HalfEdge edge : mesh.getBaseEdges()) {
 			if (edge.twin != null) {
 				twinCount++;
 			}
@@ -91,7 +95,7 @@ public class PMeshTest {
 
 		// Verify boundary vertices
 		int boundaryCount = 0;
-		for (HEVertex vertex : pMesh.vertices) {
+		for (HEVertex vertex : mesh.getVertices()) {
 			if (vertex.onBoundary) {
 				boundaryCount++;
 			}
@@ -100,18 +104,64 @@ public class PMeshTest {
 	}
 
 	@Test
-	public void test3x3GridStructure() {
-		PMesh pMesh = new PMesh(gridWithHoleMesh);
-		assertEquals(16, pMesh.vertices.size());
-		assertEquals(24, pMesh.baseEdges.size());
-		assertEquals(48 - 12 - 4, pMesh.edges.size()); // 24 edges*2 - perimeter edges - hole edges
-		assertEquals(8, pMesh.faces.size()); // 8 faces and hole
+	void test3x3GridStructure() {
+		PMesh mesh = new PMesh(gridWithHoleMesh);
+		assertEquals(16, mesh.getVertices().size());
+		assertEquals(24, mesh.getBaseEdges().size());
+		assertEquals(48 - 12 - 4, mesh.getEdges().size()); // 24 edges*2 - perimeter edges - hole edges
+		assertEquals(8, mesh.getFaces().size()); // 8 faces and hole
 	}
 
 	@Test
-	public void testEdgeNavigation() {
-		PMesh pMesh = new PMesh(triangleMesh);
-		HalfEdge edge = pMesh.edges.get(0);
+	void testVertexNeighborVertices() {
+		PMesh mesh = new PMesh(grid2x2);
+
+		assertEquals(9, mesh.getVertices().size());
+		assertEquals(12, mesh.getBaseEdges().size());
+		assertEquals(24 - 8, mesh.getEdges().size()); // 12 edges * 2 - perimeter edges
+		assertEquals(4, mesh.getFaces().size()); // 8 faces and hole
+
+		// Count the number of vertices with 2, 3, and 4 neighbors
+		int count2Neighbors = 0;
+		int count3Neighbors = 0;
+		int count4Neighbors = 0;
+
+		for (HEVertex v : mesh.getVertices()) {
+			int neighborCount = v.getNeighbors().size();
+			if (neighborCount == 2) {
+				count2Neighbors++;
+			} else if (neighborCount == 3) {
+				count3Neighbors++;
+			} else if (neighborCount == 4) {
+				count4Neighbors++;
+			} else {
+				fail("Vertex has an unexpected number of neighbors");
+			}
+		}
+
+		assertEquals(1, count4Neighbors); // 1 vertex with 4 neighbors
+		assertEquals(4, count2Neighbors); // 4 vertices with 2 neighbors (corners)
+		assertEquals(4, count3Neighbors); // 4 vertices with 3 neighbors
+	}
+
+	@Test
+	@Disabled
+	void testVertexNeighborEdges() {
+		PMesh mesh = new PMesh(grid2x2);
+		for (HEVertex v : mesh.getVertices()) {
+			System.out.println(v.getOutgoingEdges().size());
+			if (v.getPosition().equals(new PVector(1, 1))) {
+//				System.out.println(v.outgoingEdges.size());
+				v.getOutgoingEdges().forEach(e -> System.out.println(e));
+
+			}
+		}
+	}
+
+	@Test
+	void testEdgeNavigation() {
+		PMesh mesh = new PMesh(triangleMesh);
+		HalfEdge edge = mesh.getEdges().get(0);
 
 		// Test 1: Verify loop navigation (3 hops for a triangle)
 		HalfEdge current = edge;
@@ -144,12 +194,56 @@ public class PMeshTest {
 	}
 
 	@Test
-	public void testVertexPositionAccuracy() {
-		PMesh pMesh = new PMesh(triangleMesh);
-		for (HEVertex vertex : pMesh.vertices) {
-			assertNotNull(vertex.position);
-			assertEquals(3, vertex.position.array().length);
+	void testVertexPositionAccuracy() {
+		PMesh mesh = new PMesh(triangleMesh);
+		for (HEVertex vertex : mesh.getVertices()) {
+			assertNotNull(vertex.getPosition());
+			assertEquals(3, vertex.getPosition().array().length);
 		}
+	}
+
+	@Test
+	void testFaceVertexOrderPreserved() {
+		PMesh mesh = new PMesh(quadMesh);
+		var f1Vertices = mesh.getFaceVertices(mesh.getFaces().get(0)).stream().map(v -> v.getPosition()).toList();
+		var f2Vertices = mesh.getFaceVertices(mesh.getFaces().get(1)).stream().map(v -> v.getPosition()).toList();
+
+		assertEquals(3, f1Vertices.size());
+		assertTrue(PShapeUtils.isClockwise(f1Vertices));
+
+		assertEquals(3, f2Vertices.size());
+		assertTrue(PShapeUtils.isClockwise(f2Vertices));
+	}
+
+	@Test
+	void testToUnweightedGraph() {
+		var mesh = new PMesh(grid2x2);
+		var graph = mesh.toUnweightedGraph();
+		assertEquals(9, graph.vertexSet().size());
+		assertEquals(12, graph.edgeSet().size());
+	}
+
+	@Test
+	void testToWeightedGraph() {
+		var mesh = new PMesh(grid2x2);
+		ToDoubleFunction<HalfEdge> weightFunction = edge -> edge.start.getPosition().dist(edge.getEndVertex().getPosition());
+
+		var graph = mesh.toWeightedGraph(weightFunction);
+		assertEquals(9, graph.vertexSet().size());
+		assertEquals(12, graph.edgeSet().size());
+		graph.edgeSet().forEach(edge -> {
+			double expectedWeight = weightFunction.applyAsDouble(findHalfEdge(mesh, graph.getEdgeSource(edge), graph.getEdgeTarget(edge)));
+			assertEquals(expectedWeight, graph.getEdgeWeight(edge));
+		});
+	}
+
+	private HalfEdge findHalfEdge(PMesh mesh, HEVertex u, HEVertex v) {
+		for (HalfEdge he : mesh.getBaseEdges()) {
+			if (he.start == u && he.getEndVertex() == v || he.start == v && he.getEndVertex() == u) {
+				return he;
+			}
+		}
+		return null; // Should not happen in these tests if graph is built correctly
 	}
 
 	private PShape createSingleTriangleMesh() {
@@ -198,6 +292,18 @@ public class PMeshTest {
 					PShape squareMesh = createSquareAt(col, row); // Create square at grid position (col, row)
 					mesh.addChild(squareMesh);
 				}
+			}
+		}
+		return mesh;
+	}
+
+	private PShape create2x2GridSquares() {
+		PShape mesh = new PShape(PConstants.GROUP);
+
+		for (int row = 0; row < 2; row++) {
+			for (int col = 0; col < 2; col++) {
+				PShape squareMesh = createSquareAt(col, row); // Create square at grid position (col, row)
+				mesh.addChild(squareMesh);
 			}
 		}
 		return mesh;
