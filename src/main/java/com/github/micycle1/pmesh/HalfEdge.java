@@ -1,7 +1,7 @@
 package com.github.micycle1.pmesh;
 
 /**
- * A half-edge is oriented such that the triangle it bounds lies to its left.
+ * A half-edge is oriented such that the face it comprises lies to its left.
  * (because shape vertices are orientated CW)
  */
 class HalfEdge {
@@ -17,6 +17,10 @@ class HalfEdge {
 
 	public HEVertex getEndVertex() {
 		return next.start;
+	}
+
+	public double length() {
+		return start.getPosition().dist(next.start.getPosition());
 	}
 
 	@Override

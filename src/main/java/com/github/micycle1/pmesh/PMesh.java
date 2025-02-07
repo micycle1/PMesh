@@ -16,7 +16,21 @@ import processing.core.PShape;
 import processing.core.PVector;
 
 /**
- * Half-edge representation for mesh-like PShapes.
+ * A half-edge representation for mesh-like {@link PShape} objects, designed to
+ * enable efficient manipulation and processing of mesh topology and geometry.
+ * <p>
+ * The {@code PMesh} class separates the <b>topology</b> (how vertices, edges,
+ * and faces are connected) from the <b>geometry</b> (the actual coordinates of
+ * the vertices). This separation allows for operations like smoothing,
+ * subdivision, or deformation without disrupting the mesh's underlying
+ * structure.
+ * <p>
+ * The mesh is represented using a <b>half-edge data structure</b>, where each
+ * edge is split into two directed half-edges. Faces are implicitly defined by
+ * cycles of half-edges (via their {@code next} pointers), making it easy to
+ * navigate and manipulate the mesh.
+ * 
+ * @author Michael Carleton
  */
 public class PMesh {
 
@@ -25,7 +39,7 @@ public class PMesh {
 	// TODO good way to get vertex --> all outgoing edges (directionally based) (or
 	// adjacent vertices)
 	// TODO add steiner vertex (connect to vertices on the face it's inserted into)
-	
+
 	// https://geometry-central.net/surface/surface_mesh/mutation/
 
 	private final List<HEVertex> vertices;
