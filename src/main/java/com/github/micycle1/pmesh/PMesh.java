@@ -24,6 +24,9 @@ public class PMesh {
 	// TODO edge deletion (non-boundary edges only?)
 	// TODO good way to get vertex --> all outgoing edges (directionally based) (or
 	// adjacent vertices)
+	// TODO add steiner vertex (connect to vertices on the face it's inserted into)
+	
+	// https://geometry-central.net/surface/surface_mesh/mutation/
 
 	private final List<HEVertex> vertices;
 	private final List<HEFace> faces;
